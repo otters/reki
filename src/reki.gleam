@@ -72,6 +72,14 @@ pub fn supervised(
   supervision.worker(fn() { start(name) })
 }
 
+/// Create a Registry from a name. Use this when you've started the registry
+/// via supervision and need to get a Registry value to pass to lookup_or_start.
+pub fn from_name(
+  name: process.Name(RegistryMessage(key, msg)),
+) -> Registry(key, msg) {
+  Registry(name:)
+}
+
 /// Looks up an actor by key in the registry, or starts it if it doesn't exist.
 /// This function ensures that only one actor exists per key, even if called
 /// concurrently from multiple processes.

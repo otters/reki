@@ -35,8 +35,8 @@ fn test_start_fn() -> Result(
 
 fn create_registry() -> reki.Registry(String, TestMessage) {
   let name = process.new_name("test_registry")
-  let assert Ok(actor.Started(pid: _, data: registry)) = reki.start(name)
-  registry
+  let assert Ok(actor.Started(pid: _, data: _)) = reki.start(name)
+  reki.from_name(name)
 }
 
 pub fn lookup_or_start_test() {
