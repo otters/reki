@@ -86,17 +86,12 @@ fn handle_process_down(
   state: dict.Dict(key, RegistryEntry(msg)),
   pid: process.Pid,
 ) -> actor.Next(dict.Dict(key, RegistryEntry(msg)), RegistryMessage(key, msg)) {
-  fn(acc, key, entry) {
-    case entry {
-      RegistryEntry(subject: _, pid: entry_pid, monitor: _) -> {
-        case entry_pid == pid {
-          True -> acc
-          False -> dict.insert(acc, key, entry)
-        }
-      }
+  dict.fold(state, dict.new(), fn(acc, key, entry) {
+    case entry.pid == pid {
+      True -> acc
+      False -> dict.insert(acc, key, entry)
     }
-  }
-  |> dict.fold(state, dict.new(), _)
+  })
   |> actor.continue
 }
 
