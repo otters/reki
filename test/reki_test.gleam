@@ -33,8 +33,14 @@ fn test_start_fn() -> Result(
   |> actor.start
 }
 
+fn create_registry() -> reki.Registry(String, TestMessage) {
+  let name = process.new_name("test_registry")
+  let assert Ok(actor.Started(pid: _, data: registry)) = reki.start(name)
+  registry
+}
+
 pub fn lookup_or_start_test() {
-  let registry = reki.create()
+  let registry = create_registry()
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "test_key", timeout, test_start_fn)
@@ -45,7 +51,7 @@ pub fn lookup_or_start_test() {
 }
 
 pub fn different_keys_test() {
-  let registry = reki.create()
+  let registry = create_registry()
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "key1", timeout, test_start_fn)
@@ -56,7 +62,7 @@ pub fn different_keys_test() {
 }
 
 pub fn lookup_or_start_multiple_keys_test() {
-  let registry = reki.create()
+  let registry = create_registry()
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "key1", timeout, test_start_fn)
@@ -78,7 +84,7 @@ fn get_state(actor: process.Subject(TestMessage)) -> Int {
 }
 
 pub fn state_operations_test() {
-  let registry = reki.create()
+  let registry = create_registry()
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "counter", timeout, test_start_fn)
@@ -93,7 +99,7 @@ pub fn state_operations_test() {
 }
 
 pub fn state_preserved_across_lookups_test() {
-  let registry = reki.create()
+  let registry = create_registry()
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "counter", timeout, test_start_fn)
@@ -112,7 +118,7 @@ pub fn state_preserved_across_lookups_test() {
 }
 
 pub fn state_operations_in_order_test() {
-  let registry = reki.create()
+  let registry = create_registry()
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "counter", timeout, test_start_fn)
@@ -134,7 +140,7 @@ pub fn state_operations_in_order_test() {
 }
 
 pub fn concurrent_lookups_test() {
-  let registry = reki.create()
+  let registry = create_registry()
   let results = process.new_subject()
 
   let do = fn() {
@@ -159,7 +165,7 @@ pub fn concurrent_lookups_test() {
 }
 
 pub fn concurrent_state_operations_test() {
-  let registry = reki.create()
+  let registry = create_registry()
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "concurrent_counter", timeout, test_start_fn)
