@@ -73,8 +73,8 @@ pub fn lookup_or_start_multiple_keys_test() {
 
 fn get_state(actor: process.Subject(TestMessage)) -> Int {
   let reply = process.new_subject()
-  process.send(actor, Get(reply: reply))
-  process.receive(reply, within: timeout) |> result.unwrap(0)
+  process.send(actor, Get(reply:))
+  process.receive(reply, timeout) |> result.unwrap(0)
 }
 
 pub fn state_operations_test() {
@@ -150,9 +150,9 @@ pub fn concurrent_lookups_test() {
   process.spawn(do)
   process.spawn(do)
 
-  let assert Ok(actor1) = process.receive(results, within: 100)
-  let assert Ok(actor2) = process.receive(results, within: 100)
-  let assert Ok(actor3) = process.receive(results, within: 100)
+  let assert Ok(actor1) = process.receive(results, 100)
+  let assert Ok(actor2) = process.receive(results, 100)
+  let assert Ok(actor3) = process.receive(results, 100)
 
   assert actor1 == actor2
   assert actor2 == actor3
@@ -187,9 +187,9 @@ pub fn concurrent_state_operations_test() {
     process.send(results, Ok(Nil))
   })
 
-  let assert Ok(Ok(Nil)) = process.receive(results, within: 100)
-  let assert Ok(Ok(Nil)) = process.receive(results, within: 100)
-  let assert Ok(Ok(Nil)) = process.receive(results, within: 100)
+  let assert Ok(Ok(Nil)) = process.receive(results, 100)
+  let assert Ok(Ok(Nil)) = process.receive(results, 100)
+  let assert Ok(Ok(Nil)) = process.receive(results, 100)
 
   let final_state = get_state(actor)
   assert final_state == 9
