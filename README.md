@@ -58,8 +58,6 @@ pub fn main() {
   process.send(counter, Get(reply:))
   let assert Ok(2) = process.receive(reply, 1000)
 
-  // count is now 2
-
   // Look up the same actor again - returns the same counter
   let assert Ok(same_counter) = reki.lookup_or_start(
     registry,
