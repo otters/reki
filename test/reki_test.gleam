@@ -1,5 +1,6 @@
 import gleam/erlang/process
 import gleam/otp/actor
+import gleam/otp/static_supervisor as supervisor
 import gleam/result
 import gleeunit
 import reki
@@ -199,4 +200,57 @@ pub fn concurrent_state_operations_test() {
 
   let final_state = get_state(actor)
   assert final_state == 9
+}
+
+pub fn readme_example_test() {
+  // Create names at program start (before supervision tree)
+  let registry_name = process.new_name("readme_registry")
+
+  let assert Ok(_) =
+    supervisor.new(supervisor.OneForOne)
+    |> supervisor.add(reki.supervised(registry_name))
+    |> supervisor.start
+
+  let registry = reki.from_name(registry_name)
+
+  let assert Ok(counter) =
+    reki.lookup_or_start(registry, "user_123", timeout, fn() {
+      actor.new(0)
+      |> actor.on_message(fn(state, msg) {
+        case msg {
+          Incr -> state + 1 |> actor.continue
+          Get(reply:) -> {
+            process.send(reply, state)
+            actor.continue(state)
+          }
+        }
+      })
+      |> actor.start
+    })
+
+  // Use the actor - send messages and receive replies
+  process.send(counter, Incr)
+  process.send(counter, Incr)
+
+  let reply = process.new_subject()
+  process.send(counter, Get(reply:))
+  let assert Ok(2) = process.receive(reply, 1000)
+
+  // Look up the same actor again - returns the same counter
+  let assert Ok(same_counter) =
+    reki.lookup_or_start(registry, "user_123", timeout, fn() {
+      actor.new(0)
+      |> actor.on_message(fn(state, msg) {
+        case msg {
+          Incr -> state + 1 |> actor.continue
+          Get(reply:) -> {
+            process.send(reply, state)
+            actor.continue(state)
+          }
+        }
+      })
+      |> actor.start
+    })
+
+  assert same_counter == counter
 }
