@@ -1,18 +1,16 @@
 import gleam/dict
 import gleam/erlang/process
 import gleam/otp/actor
+import gleam/otp/supervision
 
 /// A registry that manages actors by key.
 /// Similar to Discord's gen_registry, this allows you to look up or start actors
 /// on demand, ensuring only one actor exists per key.
 pub opaque type Registry(key, msg) {
-  Registry(
-    pid: process.Pid,
-    subject: process.Subject(RegistryMessage(key, msg)),
-  )
+  Registry(name: process.Name(RegistryMessage(key, msg)))
 }
 
-type RegistryMessage(key, msg) {
+pub opaque type RegistryMessage(key, msg) {
   LookupOrStart(
     key: key,
     start_fn: fn() ->
@@ -30,29 +28,48 @@ type RegistryEntry(msg) {
   )
 }
 
-pub fn create() -> Registry(key, msg) {
-  let assert Ok(actor.Started(pid:, data: subject)) =
-    actor.new_with_initialiser(1000, fn(subject) {
-      let selector =
-        process.new_selector()
-        |> process.select(subject)
-        |> process.select_monitors(fn(down) {
-          case down {
-            process.ProcessDown(monitor: _, pid: down_pid, reason: _) ->
-              ProcessDown(pid: down_pid)
-            process.PortDown(..) -> ProcessDown(pid: process.self())
-          }
-        })
+/// Start the registry with the given name. You likely want to use the
+/// `supervised` function instead, to add the registry to your supervision
+/// tree, but this may still be useful in your tests.
+///
+/// Remember that names must be created at the start of your program, and must
+/// not be created dynamically such as within your supervision tree (it may
+/// restart, creating new names) or in a loop.
+pub fn start(
+  name: process.Name(RegistryMessage(key, msg)),
+) -> Result(actor.Started(Registry(key, msg)), actor.StartError) {
+  actor.new_with_initialiser(1000, fn(subject) {
+    let selector =
+      process.new_selector()
+      |> process.select(subject)
+      |> process.select_monitors(fn(down) {
+        case down {
+          process.ProcessDown(monitor: _, pid: down_pid, reason: _) ->
+            ProcessDown(pid: down_pid)
+          process.PortDown(..) -> ProcessDown(pid: process.self())
+        }
+      })
 
-      actor.initialised(dict.new())
-      |> actor.selecting(selector)
-      |> actor.returning(subject)
-      |> Ok
-    })
-    |> actor.on_message(registry_loop)
-    |> actor.start
+    actor.initialised(dict.new())
+    |> actor.selecting(selector)
+    |> actor.returning(Registry(name:))
+    |> Ok
+  })
+  |> actor.named(name)
+  |> actor.on_message(registry_loop)
+  |> actor.start
+}
 
-  Registry(pid, subject)
+/// A specification for starting the registry under a supervisor, using the
+/// given name. You should likely use this function in applications.
+///
+/// Remember that names must be created at the start of your program, and must
+/// not be created dynamically such as within your supervision tree (it may
+/// restart, creating new names) or in a loop.
+pub fn supervised(
+  name: process.Name(RegistryMessage(key, msg)),
+) -> supervision.ChildSpecification(Registry(key, msg)) {
+  supervision.worker(fn() { start(name) })
 }
 
 /// Looks up an actor by key in the registry, or starts it if it doesn't exist.
@@ -65,10 +82,13 @@ pub fn lookup_or_start(
   start_fn: fn() ->
     Result(actor.Started(process.Subject(msg)), actor.StartError),
 ) -> Result(process.Subject(msg), actor.StartError) {
-  let Registry(_pid, registry_subject) = registry
+  let Registry(name) = registry
   let reply_to = process.new_subject()
 
-  process.send(registry_subject, LookupOrStart(key:, start_fn:, reply_to:))
+  process.send(
+    process.named_subject(name),
+    LookupOrStart(key:, start_fn:, reply_to:),
+  )
 
   case process.receive(reply_to, within: timeout) {
     Ok(result) -> result
