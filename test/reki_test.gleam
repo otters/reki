@@ -203,7 +203,6 @@ pub fn concurrent_state_operations_test() {
 }
 
 pub fn readme_example_test() {
-  // Create names at program start (before supervision tree)
   let registry_name = process.new_name("readme_registry")
 
   let assert Ok(_) =
@@ -228,7 +227,6 @@ pub fn readme_example_test() {
       |> actor.start
     })
 
-  // Use the actor - send messages and receive replies
   process.send(counter, Incr)
   process.send(counter, Incr)
 
@@ -236,7 +234,6 @@ pub fn readme_example_test() {
   process.send(counter, Get(reply:))
   let assert Ok(2) = process.receive(reply, 1000)
 
-  // Look up the same actor again - returns the same counter
   let assert Ok(same_counter) =
     reki.lookup_or_start(registry, "user_123", timeout, fn() {
       actor.new(0)
