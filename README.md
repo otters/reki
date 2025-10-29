@@ -89,8 +89,6 @@ pub fn main() {
 
 ## How it works
 
-The registry maintains a dictionary of actors keyed by strings. When you call `lookup_or_start`, it checks if an actor exists for that key. If it does, it returns the existing actor. If not, it starts a new one using your provided start function and registers it.
+The registry maintains a dictionary of actors keyed by whatever key you want to use. When you call `lookup_or_start`, it checks if an actor exists for that key. If it does, it returns the existing actor. If not, it starts a new one using your provided start function and registers it.
 
 The registry monitors all registered actors and automatically removes them when they die, preventing memory leaks. Concurrent lookups are handled safely through the actor's message queue, ensuring only one actor is created per key even when multiple processes request the same key simultaneously.
-
-This library provides a similar API and behavior to Discord's `gen_registry` for Elixir.
