@@ -1,5 +1,6 @@
 import gleam/dict
 import gleam/erlang/process
+import gleam/option
 import gleam/otp/actor
 import gleam/otp/supervision
 
@@ -91,17 +92,10 @@ pub fn lookup_or_start(
     Result(actor.Started(process.Subject(msg)), actor.StartError),
 ) -> Result(process.Subject(msg), actor.StartError) {
   let Registry(name) = registry
-  let reply_to = process.new_subject()
 
-  process.send(
-    process.named_subject(name),
-    LookupOrStart(key:, start_fn:, reply_to:),
-  )
-
-  case process.receive(reply_to, within: timeout) {
-    Ok(result) -> result
-    Error(_) -> Error(actor.InitTimeout)
-  }
+  actor.call(process.named_subject(name), timeout, fn(reply_to) {
+    LookupOrStart(key:, start_fn:, reply_to:)
+  })
 }
 
 fn registry_loop(
@@ -119,12 +113,22 @@ fn handle_process_down(
   state: dict.Dict(key, RegistryEntry(msg)),
   pid: process.Pid,
 ) -> actor.Next(dict.Dict(key, RegistryEntry(msg)), RegistryMessage(key, msg)) {
-  dict.fold(state, dict.new(), fn(acc, key, entry) {
-    case entry.pid == pid {
-      True -> acc
-      False -> dict.insert(acc, key, entry)
-    }
-  })
+  let key_to_delete =
+    dict.fold(state, option.None, fn(acc, key, entry) {
+      case acc {
+        option.None ->
+          case entry.pid == pid {
+            True -> option.Some(key)
+            False -> option.None
+          }
+        option.Some(key) -> option.Some(key)
+      }
+    })
+
+  case key_to_delete {
+    option.Some(key) -> dict.delete(state, key)
+    option.None -> state
+  }
   |> actor.continue
 }
 
@@ -140,6 +144,7 @@ fn handle_lookup(
       process.send(reply_to, Ok(existing_subject))
       actor.continue(state)
     }
+
     Error(Nil) -> {
       case start_fn() {
         Ok(actor.Started(pid:, data: subject)) -> {
