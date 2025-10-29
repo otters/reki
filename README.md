@@ -2,8 +2,13 @@
 
 A Gleam actor registry that manages actors by key, similar to Discord's `gen_registry` in Elixir. It provides a way to look up or start actors on demand, ensuring only one actor exists per key and automatically cleaning up dead processes.
 
-```sh
-gleam add reki
+## Installation
+
+Add to your `gleam.toml` as a git dependency:
+
+```toml
+[dependencies]
+reki = { git = "git@github.com:otters/reki.git", ref = "<commit hash>" }
 ```
 
 ## Usage
