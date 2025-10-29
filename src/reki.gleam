@@ -6,7 +6,10 @@ import gleam/otp/actor
 /// Similar to Discord's gen_registry, this allows you to look up or start actors
 /// on demand, ensuring only one actor exists per key.
 pub opaque type Registry(key, msg) {
-  Registry(process.Subject(RegistryMessage(key, msg)))
+  Registry(
+    pid: process.Pid,
+    subject: process.Subject(RegistryMessage(key, msg)),
+  )
 }
 
 type RegistryMessage(key, msg) {
@@ -28,11 +31,11 @@ type RegistryEntry(msg) {
 }
 
 pub fn create() -> Registry(key, msg) {
-  let assert Ok(actor.Started(pid: _, data: subject)) =
-    actor.new_with_initialiser(1000, fn(registry_subject) {
+  let assert Ok(actor.Started(pid:, data: subject)) =
+    actor.new_with_initialiser(1000, fn(subject) {
       let selector =
         process.new_selector()
-        |> process.select(registry_subject)
+        |> process.select(subject)
         |> process.select_monitors(fn(down) {
           case down {
             process.ProcessDown(monitor: _, pid: down_pid, reason: _) ->
@@ -40,14 +43,16 @@ pub fn create() -> Registry(key, msg) {
             process.PortDown(..) -> ProcessDown(pid: process.self())
           }
         })
+
       actor.initialised(dict.new())
       |> actor.selecting(selector)
-      |> actor.returning(registry_subject)
+      |> actor.returning(subject)
       |> Ok
     })
     |> actor.on_message(registry_loop)
     |> actor.start
-  Registry(subject)
+
+  Registry(pid, subject)
 }
 
 /// Looks up an actor by key in the registry, or starts it if it doesn't exist.
@@ -60,7 +65,7 @@ pub fn lookup_or_start(
   start_fn: fn() ->
     Result(actor.Started(process.Subject(msg)), actor.StartError),
 ) -> Result(process.Subject(msg), actor.StartError) {
-  let Registry(registry_subject) = registry
+  let Registry(_pid, registry_subject) = registry
   let reply_to = process.new_subject()
 
   process.send(registry_subject, LookupOrStart(key:, start_fn:, reply_to:))
