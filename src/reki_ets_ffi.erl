@@ -6,7 +6,6 @@
     lookup/2,
     delete/2,
     delete_all_objects/1,
-    table_to_name/1,
     to_dynamic/1,
     cast_subject/1
 ]).
@@ -96,14 +95,6 @@ delete_all_objects(NameBin) ->
         Tid = ets:whereis(Name),
         ets:delete_all_objects(Tid),
         {ok, nil}
-    catch
-        error:badarg -> {error, nil}
-    end.
-
--spec table_to_name(reference()) -> atom() | {error, nil}.
-table_to_name(Tid) ->
-    try
-        ets:info(Tid, name)
     catch
         error:badarg -> {error, nil}
     end.
