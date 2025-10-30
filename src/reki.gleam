@@ -39,9 +39,6 @@ fn start_registry_actor(
   registry: Registry(key, msg),
 ) -> Result(actor.Started(Registry(key, msg)), actor.StartError) {
   actor.new_with_initialiser(1000, fn(subject) {
-    // Create the ETS table inside the actor initialiser so it's owned by this process.
-    // When the actor dies, the table is automatically destroyed. When the actor
-    // restarts, a new table will be created.
     case ets.new(registry.ets_table_name) {
       Ok(ets_table) -> {
         let selector =
@@ -167,7 +164,7 @@ pub fn supervised(
   let worker = supervision.worker(fn() { start_registry_actor(registry) })
 
   supervision.supervisor(fn() {
-    static_supervisor.new(static_supervisor.OneForOne)
+    static_supervisor.new(static_supervisor.OneForAll)
     |> static_supervisor.add(factory_supervisor.supervised(factory_builder))
     |> static_supervisor.add(worker)
     |> static_supervisor.start

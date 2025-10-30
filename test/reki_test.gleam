@@ -378,6 +378,36 @@ pub fn registry_restarts_after_crash_when_supervised_test() {
   assert get_state(new_actor) == 1
 }
 
+pub fn registry_ets_table_cleared_on_restart_test() {
+  let registry =
+    create_supervised_registry("registry_ets_table_cleared_on_restart")
+
+  let assert Ok(actor1) =
+    reki.lookup_or_start(registry, "test_key", test_start_fn)
+
+  let pid1 = get_pid(actor1)
+  process.send(actor1, Incr)
+  process.send(actor1, Incr)
+  process.send(actor1, Incr)
+  assert get_state(actor1) == 3
+
+  let registry_name = reki.registry_name(registry)
+  let assert Ok(registry_pid) = process.named(registry_name)
+  process.kill(registry_pid)
+
+  process.sleep(100)
+
+  assert !process.is_alive(pid1)
+
+  let assert Ok(actor2) =
+    reki.lookup_or_start(registry, "test_key", test_start_fn)
+
+  let pid2 = get_pid(actor2)
+
+  assert pid2 != pid1
+  assert get_state(actor2) == 0
+}
+
 pub fn registry_cleans_up_entry_when_actor_dies_test() {
   let registry = create_registry("registry_cleans_up_entry_when_actor_dies")
 
