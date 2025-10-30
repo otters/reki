@@ -1,7 +1,6 @@
 import gleam/erlang/process
 import gleam/otp/actor
 import gleam/otp/static_supervisor as supervisor
-import gleam/result
 import gleeunit
 import reki
 
@@ -38,8 +37,8 @@ fn test_start_fn() -> Result(
 
 fn create_registry() -> reki.Registry(String, TestMessage) {
   let registry = reki.new("test_registry")
-  let assert Ok(actor.Started(pid: _, data: registry)) = reki.start(registry)
-  registry
+  let assert Ok(started) = reki.start(registry)
+  started.data
 }
 
 pub fn lookup_or_start_test() {
@@ -72,13 +71,10 @@ pub fn lookup_or_start_multiple_keys_test() {
   assert actor1 == actor3
   assert actor1 != actor2
   assert actor2 != actor3
-  assert actor1 == actor3
 }
 
 fn get_state(actor: process.Subject(TestMessage)) -> Int {
-  let reply = process.new_subject()
-  process.send(actor, Get(reply:))
-  process.receive(reply, timeout) |> result.unwrap(0)
+  actor.call(actor, timeout, fn(reply) { Get(reply:) })
 }
 
 pub fn state_operations_test() {
