@@ -37,7 +37,7 @@ fn test_start_fn() {
 fn create_registry(test_name: String) {
   let unique_ref = reference.new()
   let unique_name = test_name <> "_" <> string.inspect(unique_ref)
-  let registry = reki.new(unique_name)
+  let registry = reki.new_named(unique_name)
   let assert Ok(started) = reki.start(registry)
   started.data
 }
@@ -197,7 +197,7 @@ pub fn concurrent_state_operations_test() {
 pub fn readme_example_test() {
   let unique_ref = reference.new()
   let unique_name = "readme_registry_" <> string.inspect(unique_ref)
-  let registry = reki.new(unique_name)
+  let registry = reki.new_named(unique_name)
 
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
@@ -249,8 +249,7 @@ pub fn readme_example_test() {
 fn create_supervised_registry(
   test_name: String,
 ) -> reki.Registry(String, TestMessage) {
-  let unique_name = test_name <> "_" <> string.inspect(reference.new())
-  let registry = reki.new(unique_name)
+  let registry = reki.new_named(test_name)
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
     |> supervisor.add(reki.supervised(registry))
@@ -386,9 +385,7 @@ pub fn registry_continues_working_after_actor_restart_test() {
 }
 
 pub fn registry_restarts_after_crash_when_supervised_test() {
-  let unique_ref = reference.new()
-  let unique_name = "registry_restart_test_" <> string.inspect(unique_ref)
-  let registry = reki.new(unique_name)
+  let registry = reki.new_named("registry_restart_test")
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
     |> supervisor.add(reki.supervised(registry))
@@ -400,8 +397,7 @@ pub fn registry_restarts_after_crash_when_supervised_test() {
   process.send(actor, Incr)
   assert get_state(actor) == 1
 
-  let registry_name = reki.registry_name(registry)
-  let assert Ok(registry_pid) = process.named(registry_name)
+  let assert Ok(registry_pid) = reki.get_pid(registry)
   process.kill(registry_pid)
 
   process.sleep(100)
@@ -427,8 +423,7 @@ pub fn registry_ets_table_cleared_on_restart_test() {
   process.send(actor1, Incr)
   assert get_state(actor1) == 3
 
-  let registry_name = reki.registry_name(registry)
-  let assert Ok(registry_pid) = process.named(registry_name)
+  let assert Ok(registry_pid) = reki.get_pid(registry)
   process.kill(registry_pid)
 
   process.sleep(100)
@@ -635,8 +630,7 @@ pub fn lookup_after_registry_restart_test() {
   process.send(actor1, Incr)
   assert get_state(actor1) == 2
 
-  let registry_name = reki.registry_name(registry)
-  let assert Ok(registry_pid) = process.named(registry_name)
+  let assert Ok(registry_pid) = reki.get_pid(registry)
   process.kill(registry_pid)
   process.sleep(200)
 
@@ -658,10 +652,7 @@ pub fn factory_supervisor_restart_test() {
   process.send(actor1, Incr)
   assert get_state(actor1) == 1
 
-  let registry_name = reki.registry_name(registry)
-  let assert Ok(_) = process.named(registry_name)
-
-  let assert Ok(registry_pid) = process.named(registry_name)
+  let assert Ok(registry_pid) = reki.get_pid(registry)
   process.kill(registry_pid)
   process.sleep(200)
 

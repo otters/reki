@@ -11,6 +11,17 @@ import reki/ets
 /// on demand, ensuring only one actor exists per key.
 pub opaque type Registry(key, msg) {
   Registry(
+    subject: process.Subject(RegistryMessage(key, msg)),
+    factory_supervisor_name: process.Name(
+      factory_supervisor.Message(
+        fn() -> Result(actor.Started(process.Subject(msg)), actor.StartError),
+        process.Subject(msg),
+      ),
+    ),
+    ets_table_name: String,
+  )
+
+  NamedRegistry(
     registry_name: process.Name(RegistryMessage(key, msg)),
     factory_supervisor_name: process.Name(
       factory_supervisor.Message(
@@ -35,35 +46,50 @@ pub opaque type RegistryMessage(key, msg) {
 @external(erlang, "reki_ets_ffi", "cast_subject")
 fn cast_subject(value: dynamic.Dynamic) -> process.Subject(msg)
 
+@internal
+pub fn get_subject(
+  registry: Registry(key, msg),
+) -> process.Subject(RegistryMessage(key, msg)) {
+  case registry {
+    NamedRegistry(registry_name:, ..) -> process.named_subject(registry_name)
+    Registry(subject:, ..) -> subject
+  }
+}
+
 fn start_registry_actor(
   registry: Registry(key, msg),
 ) -> Result(actor.Started(Registry(key, msg)), actor.StartError) {
-  actor.new_with_initialiser(1000, fn(subject) {
-    case ets.new(registry.ets_table_name) {
-      Ok(ets_table) -> {
-        let selector =
-          process.new_selector()
-          |> process.select(subject)
-          |> process.select_monitors(fn(down) {
-            case down {
-              process.ProcessDown(monitor: _, pid:, reason: _) ->
-                ProcessDown(pid:)
-              process.PortDown(..) -> ProcessDown(pid: process.self())
-            }
-          })
+  let builder =
+    actor.new_with_initialiser(1000, fn(_) {
+      case ets.new(registry.ets_table_name) {
+        Ok(ets_table) -> {
+          let selector =
+            process.new_selector()
+            |> process.select(get_subject(registry))
+            |> process.select_monitors(fn(down) {
+              case down {
+                process.ProcessDown(monitor: _, pid:, reason: _) ->
+                  ProcessDown(pid:)
+                process.PortDown(..) -> ProcessDown(pid: process.self())
+              }
+            })
 
-        actor.initialised(ets_table)
-        |> actor.selecting(selector)
-        |> actor.returning(registry)
-        |> Ok
+          actor.initialised(ets_table)
+          |> actor.selecting(selector)
+          |> actor.returning(registry)
+          |> Ok
+        }
+        Error(Nil) -> Error("Failed to create ETS table")
       }
-      Error(Nil) -> Error("Failed to create ETS table")
-    }
-  })
-  |> actor.named(registry.registry_name)
-  |> actor.on_message(fn(state, message) {
-    on_message(state, message, registry)
-  })
+    })
+    |> actor.on_message(fn(state, message) {
+      on_message(state, message, registry)
+    })
+
+  case registry {
+    NamedRegistry(registry_name:, ..) -> actor.named(builder, registry_name)
+    Registry(..) -> builder
+  }
   |> actor.start
 }
 
@@ -140,13 +166,25 @@ pub fn start(
   }
 }
 
-/// Create a registry with both names. Call this at the start of
+/// Create a registry with a given name. Call this at the start of
 /// your program before creating the supervision tree.
-pub fn new(name: String) -> Registry(key, msg) {
-  Registry(
+pub fn new_named(name: String) -> Registry(key, msg) {
+  NamedRegistry(
     registry_name: process.new_name(name),
     factory_supervisor_name: process.new_name(name <> "@factory@supervisor"),
     ets_table_name: name <> "@ets",
+  )
+}
+
+/// You probably want to use new_named.
+/// 
+/// Create a registry. Call this at the start of
+/// your program before creating the supervision tree.
+pub fn new() -> Registry(key, msg) {
+  Registry(
+    subject: process.new_subject(),
+    factory_supervisor_name: process.new_name("factory@supervisor"),
+    ets_table_name: "ets",
   )
 }
 
@@ -174,12 +212,9 @@ pub fn supervised(registry: Registry(key, msg)) {
   })
 }
 
-/// Get the registry name from a Registry. Useful for looking up the process
-/// by name or for debugging purposes.
-pub fn registry_name(
-  registry: Registry(key, msg),
-) -> process.Name(RegistryMessage(key, msg)) {
-  registry.registry_name
+@internal
+pub fn get_pid(registry: Registry(a, b)) {
+  get_subject(registry) |> process.subject_owner()
 }
 
 /// Looks up an actor by key in the registry, or starts it if it doesn't exist.
@@ -198,20 +233,16 @@ pub fn lookup_or_start(
       case ets.lookup_dynamic(key, ets_table) {
         Ok(subject_dynamic) -> Ok(cast_subject(subject_dynamic))
         Error(Nil) -> {
-          actor.call(
-            process.named_subject(registry.registry_name),
-            5000,
-            fn(reply_to) { StartIfNotExists(key:, start_fn:, reply_to:) },
-          )
+          actor.call(get_subject(registry), 5000, fn(reply_to) {
+            StartIfNotExists(key:, start_fn:, reply_to:)
+          })
         }
       }
     }
     Error(Nil) -> {
-      actor.call(
-        process.named_subject(registry.registry_name),
-        5000,
-        fn(reply_to) { StartIfNotExists(key:, start_fn:, reply_to:) },
-      )
+      actor.call(get_subject(registry), 5000, fn(reply_to) {
+        StartIfNotExists(key:, start_fn:, reply_to:)
+      })
     }
   }
 }
