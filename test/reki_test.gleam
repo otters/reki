@@ -394,6 +394,18 @@ pub fn registry_cleans_up_entry_when_actor_dies_test() {
   assert get_state(actor2) == 0
 }
 
+pub fn start_fn_failure_propagates_error_test() {
+  let registry = create_registry()
+
+  let failing_start_fn = fn() {
+    actor.new_with_initialiser(100, fn(_) { Error("initialization failed") })
+    |> actor.start
+  }
+
+  let assert Error(_) =
+    reki.lookup_or_start(registry, "failing_key", timeout, failing_start_fn)
+}
+
 pub fn timeout_handling_test() {
   let registry = create_registry()
 
@@ -403,6 +415,17 @@ pub fn timeout_handling_test() {
 
 pub fn registry_handles_multiple_failures_test() {
   let registry = create_registry()
+
+  let failing_start_fn = fn() {
+    actor.new_with_initialiser(100, fn(_) { Error("initialization failed") })
+    |> actor.start
+  }
+
+  let assert Error(_) =
+    reki.lookup_or_start(registry, "fail_key", timeout, failing_start_fn)
+
+  let assert Error(_) =
+    reki.lookup_or_start(registry, "fail_key", timeout, failing_start_fn)
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "fail_key", timeout, test_start_fn)
