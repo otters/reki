@@ -25,7 +25,7 @@ fn test_start_fn() -> Result(
   |> actor.new
   |> actor.on_message(fn(state, message) {
     case message {
-      Incr -> state + 1 |> actor.continue
+      Incr -> actor.continue(state + 1)
       Get(reply:) -> {
         process.send(reply, state)
         actor.continue(state)
