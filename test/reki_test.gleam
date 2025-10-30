@@ -419,30 +419,21 @@ pub fn concurrent_lookups_with_different_keys_test() {
   let registry = create_registry()
   let results = process.new_subject()
 
-  process.spawn(fn() {
-    case reki.lookup_or_start(registry, "key1", test_start_fn) {
-      Ok(actor) -> process.send(results, #("key1", Ok(actor)))
-      Error(e) -> process.send(results, #("key1", Error(e)))
+  let do = fn(key: String) {
+    use <- process.spawn
+    case reki.lookup_or_start(registry, key, test_start_fn) {
+      Ok(actor) -> process.send(results, #(key, Ok(actor)))
+      Error(e) -> process.send(results, #(key, Error(e)))
     }
-  })
+  }
 
-  process.spawn(fn() {
-    case reki.lookup_or_start(registry, "key2", test_start_fn) {
-      Ok(actor) -> process.send(results, #("key2", Ok(actor)))
-      Error(e) -> process.send(results, #("key2", Error(e)))
-    }
-  })
+  do("key1")
+  do("key2")
+  do("key3")
 
-  process.spawn(fn() {
-    case reki.lookup_or_start(registry, "key3", test_start_fn) {
-      Ok(actor) -> process.send(results, #("key3", Ok(actor)))
-      Error(e) -> process.send(results, #("key3", Error(e)))
-    }
-  })
-
-  let assert Ok(#("key1", Ok(actor1))) = process.receive(results, 100)
-  let assert Ok(#("key2", Ok(actor2))) = process.receive(results, 100)
-  let assert Ok(#("key3", Ok(actor3))) = process.receive(results, 100)
+  let assert Ok(#("key1", Ok(actor1))) = process.receive(results, timeout)
+  let assert Ok(#("key2", Ok(actor2))) = process.receive(results, timeout)
+  let assert Ok(#("key3", Ok(actor3))) = process.receive(results, timeout)
 
   assert actor1 != actor2
   assert actor2 != actor3
