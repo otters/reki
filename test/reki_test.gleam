@@ -1,6 +1,8 @@
 import gleam/erlang/process
+import gleam/erlang/reference
 import gleam/otp/actor
 import gleam/otp/static_supervisor as supervisor
+import gleam/string
 import gleeunit
 import reki
 
@@ -35,14 +37,16 @@ fn test_start_fn() -> Result(
   |> actor.start
 }
 
-fn create_registry() -> reki.Registry(String, TestMessage) {
-  let registry = reki.new("test_registry")
+fn create_registry(test_name: String) -> reki.Registry(String, TestMessage) {
+  let unique_ref = reference.new()
+  let unique_name = test_name <> "_" <> string.inspect(unique_ref)
+  let registry = reki.new(unique_name)
   let assert Ok(started) = reki.start(registry)
   started.data
 }
 
 pub fn lookup_or_start_test() {
-  let registry = create_registry()
+  let registry = create_registry("lookup_or_start")
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "test_key", test_start_fn)
@@ -53,7 +57,7 @@ pub fn lookup_or_start_test() {
 }
 
 pub fn different_keys_test() {
-  let registry = create_registry()
+  let registry = create_registry("different_keys")
 
   let assert Ok(actor1) = reki.lookup_or_start(registry, "key1", test_start_fn)
   let assert Ok(actor2) = reki.lookup_or_start(registry, "key2", test_start_fn)
@@ -62,7 +66,7 @@ pub fn different_keys_test() {
 }
 
 pub fn lookup_or_start_multiple_keys_test() {
-  let registry = create_registry()
+  let registry = create_registry("lookup_or_start_multiple_keys")
 
   let assert Ok(actor1) = reki.lookup_or_start(registry, "key1", test_start_fn)
   let assert Ok(actor2) = reki.lookup_or_start(registry, "key2", test_start_fn)
@@ -78,7 +82,7 @@ fn get_state(actor: process.Subject(TestMessage)) -> Int {
 }
 
 pub fn state_operations_test() {
-  let registry = create_registry()
+  let registry = create_registry("state_operations")
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "counter", test_start_fn)
@@ -93,7 +97,7 @@ pub fn state_operations_test() {
 }
 
 pub fn state_preserved_across_lookups_test() {
-  let registry = create_registry()
+  let registry = create_registry("state_preserved_across_lookups")
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "counter", test_start_fn)
@@ -112,7 +116,7 @@ pub fn state_preserved_across_lookups_test() {
 }
 
 pub fn state_operations_in_order_test() {
-  let registry = create_registry()
+  let registry = create_registry("state_operations_in_order")
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "counter", test_start_fn)
@@ -134,7 +138,7 @@ pub fn state_operations_in_order_test() {
 }
 
 pub fn concurrent_lookups_test() {
-  let registry = create_registry()
+  let registry = create_registry("concurrent_lookups")
   let results = process.new_subject()
 
   let do = fn() {
@@ -157,7 +161,7 @@ pub fn concurrent_lookups_test() {
 }
 
 pub fn concurrent_state_operations_test() {
-  let registry = create_registry()
+  let registry = create_registry("concurrent_state_operations")
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "concurrent_counter", test_start_fn)
@@ -194,7 +198,10 @@ pub fn concurrent_state_operations_test() {
 }
 
 pub fn readme_example_test() {
-  let registry = reki.new("readme_registry")
+  // Use unique name for this test
+  let unique_ref = reference.new()
+  let unique_name = "readme_registry_" <> string.inspect(unique_ref)
+  let registry = reki.new(unique_name)
 
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
@@ -243,8 +250,12 @@ pub fn readme_example_test() {
   assert same_counter == counter
 }
 
-fn create_supervised_registry() -> reki.Registry(String, TestMessage) {
-  let registry = reki.new("supervised_test_registry")
+fn create_supervised_registry(
+  test_name: String,
+) -> reki.Registry(String, TestMessage) {
+  let unique_ref = reference.new()
+  let unique_name = test_name <> "_" <> string.inspect(unique_ref)
+  let registry = reki.new(unique_name)
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
     |> supervisor.add(reki.supervised(registry))
@@ -258,7 +269,8 @@ fn get_pid(actor: process.Subject(TestMessage)) -> process.Pid {
 }
 
 pub fn supervised_actor_restarts_after_crash_test() {
-  let registry = create_supervised_registry()
+  let registry =
+    create_supervised_registry("supervised_actor_restarts_after_crash")
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "crash_test", test_start_fn)
@@ -285,7 +297,8 @@ pub fn supervised_actor_restarts_after_crash_test() {
 }
 
 pub fn supervised_actor_restarts_after_abnormal_exit_test() {
-  let registry = create_supervised_registry()
+  let registry =
+    create_supervised_registry("supervised_actor_restarts_after_abnormal_exit")
 
   let assert Ok(actor) =
     reki.lookup_or_start(registry, "abnormal_exit_test", test_start_fn)
@@ -309,7 +322,8 @@ pub fn supervised_actor_restarts_after_abnormal_exit_test() {
 }
 
 pub fn registry_continues_working_after_actor_restart_test() {
-  let registry = create_supervised_registry()
+  let registry =
+    create_supervised_registry("registry_continues_working_after_actor_restart")
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "continues_test", test_start_fn)
@@ -336,7 +350,9 @@ pub fn registry_continues_working_after_actor_restart_test() {
 }
 
 pub fn registry_restarts_after_crash_when_supervised_test() {
-  let registry = reki.new("registry_restart_test")
+  let unique_ref = reference.new()
+  let unique_name = "registry_restart_test_" <> string.inspect(unique_ref)
+  let registry = reki.new(unique_name)
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
     |> supervisor.add(reki.supervised(registry))
@@ -363,7 +379,7 @@ pub fn registry_restarts_after_crash_when_supervised_test() {
 }
 
 pub fn registry_cleans_up_entry_when_actor_dies_test() {
-  let registry = create_registry()
+  let registry = create_registry("registry_cleans_up_entry_when_actor_dies")
 
   let assert Ok(actor1) =
     reki.lookup_or_start(registry, "cleanup_test", test_start_fn)
@@ -384,7 +400,7 @@ pub fn registry_cleans_up_entry_when_actor_dies_test() {
 }
 
 pub fn start_fn_failure_propagates_error_test() {
-  let registry = create_registry()
+  let registry = create_registry("start_fn_failure_propagates_error")
 
   let failing_start_fn = fn() {
     actor.new_with_initialiser(100, fn(_) { Error("initialization failed") })
@@ -396,7 +412,7 @@ pub fn start_fn_failure_propagates_error_test() {
 }
 
 pub fn registry_handles_multiple_failures_test() {
-  let registry = create_registry()
+  let registry = create_registry("registry_handles_multiple_failures")
 
   let failing_start_fn = fn() {
     actor.new_with_initialiser(100, fn(_) { Error("initialization failed") })
@@ -416,7 +432,7 @@ pub fn registry_handles_multiple_failures_test() {
 }
 
 pub fn concurrent_lookups_with_different_keys_test() {
-  let registry = create_registry()
+  let registry = create_registry("concurrent_lookups_with_different_keys")
   let results = process.new_subject()
 
   let do = fn(key: String) {

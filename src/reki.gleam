@@ -38,11 +38,12 @@ fn cast_subject(value: dynamic.Dynamic) -> process.Subject(msg)
 fn start_registry_actor(
   registry: Registry(key, msg),
 ) -> Result(actor.Started(Registry(key, msg)), actor.StartError) {
-  case ets.get_or_create(registry.ets_table_name) {
-    Ok(ets_table) -> {
-      let _ = ets.clear_table(ets_table)
-
-      actor.new_with_initialiser(1000, fn(subject) {
+  actor.new_with_initialiser(1000, fn(subject) {
+    // Create the ETS table inside the actor initialiser so it's owned by this process.
+    // When the actor dies, the table is automatically destroyed. When the actor
+    // restarts, a new table will be created.
+    case ets.new(registry.ets_table_name) {
+      Ok(ets_table) -> {
         let selector =
           process.new_selector()
           |> process.select(subject)
@@ -58,15 +59,15 @@ fn start_registry_actor(
         |> actor.selecting(selector)
         |> actor.returning(registry)
         |> Ok
-      })
-      |> actor.named(registry.registry_name)
-      |> actor.on_message(fn(state, message) {
-        on_message(state, message, registry)
-      })
-      |> actor.start
+      }
+      Error(Nil) -> Error("Failed to create ETS table")
     }
-    Error(_) -> Error(actor.InitFailed("Failed to create ETS table"))
-  }
+  })
+  |> actor.named(registry.registry_name)
+  |> actor.on_message(fn(state, message) {
+    on_message(state, message, registry)
+  })
+  |> actor.start
 }
 
 fn on_message(
@@ -205,7 +206,7 @@ pub fn lookup_or_start(
         }
       }
     }
-    Error(_) -> {
+    Error(Nil) -> {
       actor.call(
         process.named_subject(registry.registry_name),
         5000,
