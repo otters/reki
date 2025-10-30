@@ -46,9 +46,9 @@ pub fn lookup_or_start_test() {
   let registry = create_registry()
 
   let assert Ok(actor1) =
-    reki.lookup_or_start(registry, "test_key", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "test_key", test_start_fn)
   let assert Ok(actor2) =
-    reki.lookup_or_start(registry, "test_key", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "test_key", test_start_fn)
 
   assert actor1 == actor2
 }
@@ -56,10 +56,8 @@ pub fn lookup_or_start_test() {
 pub fn different_keys_test() {
   let registry = create_registry()
 
-  let assert Ok(actor1) =
-    reki.lookup_or_start(registry, "key1", timeout, test_start_fn)
-  let assert Ok(actor2) =
-    reki.lookup_or_start(registry, "key2", timeout, test_start_fn)
+  let assert Ok(actor1) = reki.lookup_or_start(registry, "key1", test_start_fn)
+  let assert Ok(actor2) = reki.lookup_or_start(registry, "key2", test_start_fn)
 
   assert actor1 != actor2
 }
@@ -67,12 +65,9 @@ pub fn different_keys_test() {
 pub fn lookup_or_start_multiple_keys_test() {
   let registry = create_registry()
 
-  let assert Ok(actor1) =
-    reki.lookup_or_start(registry, "key1", timeout, test_start_fn)
-  let assert Ok(actor2) =
-    reki.lookup_or_start(registry, "key2", timeout, test_start_fn)
-  let assert Ok(actor3) =
-    reki.lookup_or_start(registry, "key1", timeout, test_start_fn)
+  let assert Ok(actor1) = reki.lookup_or_start(registry, "key1", test_start_fn)
+  let assert Ok(actor2) = reki.lookup_or_start(registry, "key2", test_start_fn)
+  let assert Ok(actor3) = reki.lookup_or_start(registry, "key1", test_start_fn)
 
   assert actor1 == actor3
   assert actor1 != actor2
@@ -90,7 +85,7 @@ pub fn state_operations_test() {
   let registry = create_registry()
 
   let assert Ok(actor) =
-    reki.lookup_or_start(registry, "counter", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "counter", test_start_fn)
 
   assert get_state(actor) == 0
 
@@ -105,13 +100,13 @@ pub fn state_preserved_across_lookups_test() {
   let registry = create_registry()
 
   let assert Ok(actor1) =
-    reki.lookup_or_start(registry, "counter", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "counter", test_start_fn)
 
   process.send(actor1, Incr)
   process.send(actor1, Incr)
 
   let assert Ok(actor2) =
-    reki.lookup_or_start(registry, "counter", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "counter", test_start_fn)
 
   assert actor1 == actor2
   assert get_state(actor2) == 2
@@ -124,7 +119,7 @@ pub fn state_operations_in_order_test() {
   let registry = create_registry()
 
   let assert Ok(actor) =
-    reki.lookup_or_start(registry, "counter", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "counter", test_start_fn)
 
   assert get_state(actor) == 0
 
@@ -147,9 +142,7 @@ pub fn concurrent_lookups_test() {
   let results = process.new_subject()
 
   let do = fn() {
-    case
-      reki.lookup_or_start(registry, "concurrent_key", timeout, test_start_fn)
-    {
+    case reki.lookup_or_start(registry, "concurrent_key", test_start_fn) {
       Ok(actor) -> process.send(results, Ok(actor))
       Error(e) -> process.send(results, Error(e))
     }
@@ -171,7 +164,7 @@ pub fn concurrent_state_operations_test() {
   let registry = create_registry()
 
   let assert Ok(actor) =
-    reki.lookup_or_start(registry, "concurrent_counter", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "concurrent_counter", test_start_fn)
 
   let results = process.new_subject()
 
@@ -213,7 +206,7 @@ pub fn readme_example_test() {
     |> supervisor.start
 
   let assert Ok(counter) =
-    reki.lookup_or_start(registry, "user_123", timeout, fn() {
+    reki.lookup_or_start(registry, "user_123", fn() {
       actor.new(0)
       |> actor.on_message(fn(state, msg) {
         case msg {
@@ -236,7 +229,7 @@ pub fn readme_example_test() {
   let assert Ok(2) = process.receive(reply, 1000)
 
   let assert Ok(same_counter) =
-    reki.lookup_or_start(registry, "user_123", timeout, fn() {
+    reki.lookup_or_start(registry, "user_123", fn() {
       actor.new(0)
       |> actor.on_message(fn(state, msg) {
         case msg {
@@ -272,7 +265,7 @@ pub fn supervised_actor_restarts_after_crash_test() {
   let registry = create_supervised_registry()
 
   let assert Ok(actor) =
-    reki.lookup_or_start(registry, "crash_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "crash_test", test_start_fn)
 
   let pid = get_pid(actor)
   assert process.is_alive(pid) == True
@@ -285,7 +278,7 @@ pub fn supervised_actor_restarts_after_crash_test() {
   process.sleep(100)
 
   let assert Ok(restarted_actor) =
-    reki.lookup_or_start(registry, "crash_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "crash_test", test_start_fn)
 
   assert actor != restarted_actor
 
@@ -299,7 +292,7 @@ pub fn supervised_actor_restarts_after_abnormal_exit_test() {
   let registry = create_supervised_registry()
 
   let assert Ok(actor) =
-    reki.lookup_or_start(registry, "abnormal_exit_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "abnormal_exit_test", test_start_fn)
 
   let pid = get_pid(actor)
   assert process.is_alive(pid) == True
@@ -311,7 +304,7 @@ pub fn supervised_actor_restarts_after_abnormal_exit_test() {
   process.sleep(100)
 
   let assert Ok(restarted_actor) =
-    reki.lookup_or_start(registry, "abnormal_exit_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "abnormal_exit_test", test_start_fn)
 
   let restarted_pid = get_pid(restarted_actor)
   assert restarted_pid != pid
@@ -323,7 +316,7 @@ pub fn registry_continues_working_after_actor_restart_test() {
   let registry = create_supervised_registry()
 
   let assert Ok(actor1) =
-    reki.lookup_or_start(registry, "continues_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "continues_test", test_start_fn)
 
   let pid1 = get_pid(actor1)
 
@@ -335,7 +328,7 @@ pub fn registry_continues_working_after_actor_restart_test() {
   process.sleep(100)
 
   let assert Ok(actor2) =
-    reki.lookup_or_start(registry, "continues_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "continues_test", test_start_fn)
 
   let pid2 = get_pid(actor2)
   assert pid2 != pid1
@@ -354,7 +347,7 @@ pub fn registry_restarts_after_crash_when_supervised_test() {
     |> supervisor.start
 
   let assert Ok(actor) =
-    reki.lookup_or_start(registry, "test_key", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "test_key", test_start_fn)
 
   process.send(actor, Incr)
   assert get_state(actor) == 1
@@ -366,7 +359,7 @@ pub fn registry_restarts_after_crash_when_supervised_test() {
   process.sleep(100)
 
   let assert Ok(new_actor) =
-    reki.lookup_or_start(registry, "test_key", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "test_key", test_start_fn)
 
   assert get_state(new_actor) == 0
   process.send(new_actor, Incr)
@@ -377,7 +370,7 @@ pub fn registry_cleans_up_entry_when_actor_dies_test() {
   let registry = create_registry()
 
   let assert Ok(actor1) =
-    reki.lookup_or_start(registry, "cleanup_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "cleanup_test", test_start_fn)
 
   let pid1 = get_pid(actor1)
   process.send(actor1, Incr)
@@ -387,7 +380,7 @@ pub fn registry_cleans_up_entry_when_actor_dies_test() {
   process.sleep(100)
 
   let assert Ok(actor2) =
-    reki.lookup_or_start(registry, "cleanup_test", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "cleanup_test", test_start_fn)
 
   let pid2 = get_pid(actor2)
   assert pid2 != pid1
@@ -403,7 +396,7 @@ pub fn start_fn_failure_propagates_error_test() {
   }
 
   let assert Error(_) =
-    reki.lookup_or_start(registry, "failing_key", timeout, failing_start_fn)
+    reki.lookup_or_start(registry, "failing_key", failing_start_fn)
 }
 
 pub fn registry_handles_multiple_failures_test() {
@@ -415,13 +408,13 @@ pub fn registry_handles_multiple_failures_test() {
   }
 
   let assert Error(_) =
-    reki.lookup_or_start(registry, "fail_key", timeout, failing_start_fn)
+    reki.lookup_or_start(registry, "fail_key", failing_start_fn)
 
   let assert Error(_) =
-    reki.lookup_or_start(registry, "fail_key", timeout, failing_start_fn)
+    reki.lookup_or_start(registry, "fail_key", failing_start_fn)
 
   let assert Ok(actor) =
-    reki.lookup_or_start(registry, "fail_key", timeout, test_start_fn)
+    reki.lookup_or_start(registry, "fail_key", test_start_fn)
 
   assert get_state(actor) == 0
 }
@@ -431,21 +424,21 @@ pub fn concurrent_lookups_with_different_keys_test() {
   let results = process.new_subject()
 
   process.spawn(fn() {
-    case reki.lookup_or_start(registry, "key1", timeout, test_start_fn) {
+    case reki.lookup_or_start(registry, "key1", test_start_fn) {
       Ok(actor) -> process.send(results, #("key1", Ok(actor)))
       Error(e) -> process.send(results, #("key1", Error(e)))
     }
   })
 
   process.spawn(fn() {
-    case reki.lookup_or_start(registry, "key2", timeout, test_start_fn) {
+    case reki.lookup_or_start(registry, "key2", test_start_fn) {
       Ok(actor) -> process.send(results, #("key2", Ok(actor)))
       Error(e) -> process.send(results, #("key2", Error(e)))
     }
   })
 
   process.spawn(fn() {
-    case reki.lookup_or_start(registry, "key3", timeout, test_start_fn) {
+    case reki.lookup_or_start(registry, "key3", test_start_fn) {
       Ok(actor) -> process.send(results, #("key3", Ok(actor)))
       Error(e) -> process.send(results, #("key3", Error(e)))
     }

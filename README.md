@@ -37,7 +37,6 @@ pub fn main() {
    let assert Ok(counter) = reki.lookup_or_start(
     registry,
     "user_123",
-    5000,
     fn() {
       actor.new(0)
       |> actor.on_message(fn(state, msg) {
@@ -65,7 +64,6 @@ pub fn main() {
   let assert Ok(same_counter) = reki.lookup_or_start(
     registry,
     "user_123",
-    5000,
     fn() {
       actor.new(0)
       |> actor.on_message(fn(state, msg) {
@@ -87,6 +85,6 @@ pub fn main() {
 
 ## How it works
 
-The registry maintains a dictionary of actors keyed by whatever key you want to use. When you call `lookup_or_start`, it checks if an actor exists for that key. If it does, it returns the existing actor. If not, it starts a new one using your provided start function under a factory supervisor and registers it.
+The registry maintains a dictionary of actors keyed by whatever key you want to use. When you call `lookup_or_start`, it checks if an actor exists for that key. If it does, it returns the existing actor synchronously via ETS (no timeout needed). If not, it starts a new one using your provided start function under a factory supervisor and registers it.
 
 All dynamically started actors are supervised by a factory supervisor, ensuring they are properly managed and restarted if they crash abnormally. The registry monitors all registered actors and automatically removes them when they die, preventing memory leaks. Concurrent lookups are handled safely through the actor's message queue, ensuring only one actor is created per key even when multiple processes request the same key simultaneously.

@@ -1,10 +1,10 @@
-import gleam/dict
+import gleam/dynamic
 import gleam/erlang/process
-import gleam/option
 import gleam/otp/actor
 import gleam/otp/factory_supervisor
 import gleam/otp/static_supervisor
 import gleam/otp/supervision
+import reki/ets
 
 /// A registry that manages actors by key.
 /// Similar to Discord's gen_registry, this allows you to look up or start actors
@@ -18,11 +18,12 @@ pub opaque type Registry(key, msg) {
         process.Subject(msg),
       ),
     ),
+    ets_table_name: String,
   )
 }
 
 pub opaque type RegistryMessage(key, msg) {
-  LookupOrStart(
+  StartIfNotExists(
     key: key,
     start_fn: fn() ->
       Result(actor.Started(process.Subject(msg)), actor.StartError),
@@ -31,69 +32,73 @@ pub opaque type RegistryMessage(key, msg) {
   ProcessDown(pid: process.Pid)
 }
 
-type RegistryEntry(msg) {
-  RegistryEntry(
-    subject: process.Subject(msg),
-    pid: process.Pid,
-    monitor: process.Monitor,
-  )
-}
+@external(erlang, "reki_ets_ffi", "cast_subject")
+fn cast_subject(value: dynamic.Dynamic) -> process.Subject(msg)
 
 fn start_registry_actor(
   registry: Registry(key, msg),
 ) -> Result(actor.Started(Registry(key, msg)), actor.StartError) {
-  actor.new_with_initialiser(1000, fn(subject) {
-    let selector =
-      process.new_selector()
-      |> process.select(subject)
-      |> process.select_monitors(fn(down) {
-        case down {
-          process.ProcessDown(monitor: _, pid:, reason: _) -> ProcessDown(pid:)
-          process.PortDown(..) -> ProcessDown(pid: process.self())
-        }
-      })
+  case ets.get_or_create(registry.ets_table_name) {
+    Ok(ets_table) -> {
+      let _ = ets.clear_table(ets_table)
 
-    let state = dict.new()
-    actor.initialised(state)
-    |> actor.selecting(selector)
-    |> actor.returning(registry)
-    |> Ok
-  })
-  |> actor.named(registry.registry_name)
-  |> actor.on_message(fn(state, message) {
-    on_message(state, message, registry)
-  })
-  |> actor.start
+      actor.new_with_initialiser(1000, fn(subject) {
+        let selector =
+          process.new_selector()
+          |> process.select(subject)
+          |> process.select_monitors(fn(down) {
+            case down {
+              process.ProcessDown(monitor: _, pid:, reason: _) ->
+                ProcessDown(pid:)
+              process.PortDown(..) -> ProcessDown(pid: process.self())
+            }
+          })
+
+        actor.initialised(ets_table)
+        |> actor.selecting(selector)
+        |> actor.returning(registry)
+        |> Ok
+      })
+      |> actor.named(registry.registry_name)
+      |> actor.on_message(fn(state, message) {
+        on_message(state, message, registry)
+      })
+      |> actor.start
+    }
+    Error(_) -> Error(actor.InitFailed("Failed to create ETS table"))
+  }
 }
 
 fn on_message(
-  state: dict.Dict(key, RegistryEntry(msg)),
+  ets_table: ets.Table,
   message: RegistryMessage(key, msg),
   registry: Registry(key, msg),
-) -> actor.Next(dict.Dict(key, RegistryEntry(msg)), RegistryMessage(key, msg)) {
+) -> actor.Next(ets.Table, RegistryMessage(key, msg)) {
   case message {
-    LookupOrStart(key:, start_fn:, reply_to:) -> {
-      case dict.get(state, key) {
-        Ok(entry) -> {
-          process.send(reply_to, Ok(entry.subject))
-          actor.continue(state)
+    StartIfNotExists(key:, start_fn:, reply_to:) -> {
+      case ets.lookup_dynamic(key, ets_table) {
+        Ok(subject_dynamic) -> {
+          process.send(reply_to, Ok(cast_subject(subject_dynamic)))
+          actor.continue(ets_table)
         }
 
         Error(Nil) -> {
           let supervisor =
             factory_supervisor.get_by_name(registry.factory_supervisor_name)
+
           case factory_supervisor.start_child(supervisor, start_fn) {
             Ok(actor.Started(pid:, data: subject)) -> {
-              let monitor = process.monitor(pid)
-              let entry = RegistryEntry(subject:, pid:, monitor:)
-              process.send(reply_to, Ok(subject))
+              let _ = process.monitor(pid)
 
-              dict.insert(state, key, entry)
-              |> actor.continue
+              let assert Ok(Nil) = ets.insert(key, subject, ets_table)
+              let assert Ok(Nil) = ets.insert(pid, key, ets_table)
+
+              process.send(reply_to, Ok(subject))
+              actor.continue(ets_table)
             }
             Error(e) -> {
               process.send(reply_to, Error(e))
-              actor.continue(state)
+              actor.continue(ets_table)
             }
           }
         }
@@ -101,23 +106,16 @@ fn on_message(
     }
 
     ProcessDown(pid:) -> {
-      let key_to_delete =
-        dict.fold(state, option.None, fn(acc, key, entry) {
-          case acc {
-            option.None ->
-              case entry.pid == pid {
-                True -> option.Some(key)
-                False -> option.None
-              }
-            option.Some(key) -> option.Some(key)
-          }
-        })
-
-      case key_to_delete {
-        option.Some(key) -> dict.delete(state, key)
-        option.None -> state
+      case ets.lookup_dynamic(pid, ets_table) {
+        Ok(key_dynamic) -> {
+          let _ = ets.delete_using_dynamic(key_dynamic, ets_table)
+          let _ = ets.delete(pid, ets_table)
+          actor.continue(ets_table)
+        }
+        Error(Nil) -> {
+          actor.continue(ets_table)
+        }
       }
-      |> actor.continue
     }
   }
 }
@@ -149,6 +147,7 @@ pub fn new(name: String) -> Registry(key, msg) {
   Registry(
     registry_name: process.new_name(name),
     factory_supervisor_name: process.new_name(name <> "@factory@supervisor"),
+    ets_table_name: name <> "@ets",
   )
 }
 
@@ -185,16 +184,34 @@ pub fn registry_name(
 /// Looks up an actor by key in the registry, or starts it if it doesn't exist.
 /// This function ensures that only one actor exists per key, even if called
 /// concurrently from multiple processes.
+/// Lookups are synchronous via ETS, so no timeout is needed for existing entries.
+/// When starting a new actor, a default timeout of 5000ms is used.
 pub fn lookup_or_start(
   registry: Registry(key, msg),
   key: key,
-  timeout: Int,
   start_fn: fn() ->
     Result(actor.Started(process.Subject(msg)), actor.StartError),
 ) -> Result(process.Subject(msg), actor.StartError) {
-  actor.call(
-    process.named_subject(registry.registry_name),
-    timeout,
-    fn(reply_to) { LookupOrStart(key:, start_fn:, reply_to:) },
-  )
+  let ets_table_name = registry.ets_table_name
+  case ets.get_or_create(ets_table_name) {
+    Ok(ets_table) -> {
+      case ets.lookup_dynamic(key, ets_table) {
+        Ok(subject_dynamic) -> Ok(cast_subject(subject_dynamic))
+        Error(Nil) -> {
+          actor.call(
+            process.named_subject(registry.registry_name),
+            5000,
+            fn(reply_to) { StartIfNotExists(key:, start_fn:, reply_to:) },
+          )
+        }
+      }
+    }
+    Error(_) -> {
+      actor.call(
+        process.named_subject(registry.registry_name),
+        5000,
+        fn(reply_to) { StartIfNotExists(key:, start_fn:, reply_to:) },
+      )
+    }
+  }
 }
