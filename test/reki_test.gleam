@@ -18,12 +18,8 @@ pub type TestMessage {
   Crash
 }
 
-fn test_start_fn() -> Result(
-  actor.Started(process.Subject(TestMessage)),
-  actor.StartError,
-) {
-  0
-  |> actor.new
+fn test_start_fn() {
+  actor.new(0)
   |> actor.on_message(fn(state, message) {
     case message {
       Incr -> actor.continue(state + 1)
@@ -253,8 +249,7 @@ pub fn readme_example_test() {
 fn create_supervised_registry(
   test_name: String,
 ) -> reki.Registry(String, TestMessage) {
-  let unique_ref = reference.new()
-  let unique_name = test_name <> "_" <> string.inspect(unique_ref)
+  let unique_name = test_name <> "_" <> string.inspect(reference.new())
   let registry = reki.new(unique_name)
   let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
@@ -319,6 +314,48 @@ pub fn supervised_actor_restarts_after_abnormal_exit_test() {
   assert restarted_pid != pid
   assert process.is_alive(restarted_pid) == True
   assert get_state(restarted_actor) == 0
+}
+
+pub fn actor_crash_does_not_affect_other_actors_test() {
+  let registry =
+    create_supervised_registry("actor_crash_does_not_affect_other_actors")
+
+  let assert Ok(actor_a) =
+    reki.lookup_or_start(registry, "channel_a", test_start_fn)
+
+  let assert Ok(actor_b) =
+    reki.lookup_or_start(registry, "channel_b", test_start_fn)
+
+  assert actor_a != actor_b
+
+  // a
+  process.send(actor_a, Incr)
+  process.send(actor_a, Incr)
+  // b
+  process.send(actor_b, Incr)
+  process.send(actor_b, Incr)
+  process.send(actor_b, Incr)
+
+  assert get_state(actor_a) == 2
+  assert get_state(actor_b) == 3
+
+  let pid_a = get_pid(actor_a)
+  process.kill(pid_a)
+  process.sleep(100)
+
+  assert !process.is_alive(pid_a)
+
+  let pid_b = get_pid(actor_b)
+  assert process.is_alive(pid_b) == True
+  assert get_state(actor_b) == 3
+
+  let assert Ok(restarted_actor_a) =
+    reki.lookup_or_start(registry, "channel_a", test_start_fn)
+
+  let restarted_pid_a = get_pid(restarted_actor_a)
+  assert restarted_pid_a != pid_a
+  assert get_state(restarted_actor_a) == 0
+  assert get_state(actor_b) == 3
 }
 
 pub fn registry_continues_working_after_actor_restart_test() {

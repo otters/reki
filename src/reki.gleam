@@ -81,10 +81,11 @@ fn on_message(
         }
 
         Error(Nil) -> {
-          let supervisor =
-            factory_supervisor.get_by_name(registry.factory_supervisor_name)
-
-          case factory_supervisor.start_child(supervisor, start_fn) {
+          case
+            registry.factory_supervisor_name
+            |> factory_supervisor.get_by_name()
+            |> factory_supervisor.start_child(start_fn)
+          {
             Ok(actor.Started(pid:, data: subject)) -> {
               let _ = process.monitor(pid)
 
@@ -149,24 +150,26 @@ pub fn new(name: String) -> Registry(key, msg) {
   )
 }
 
+fn get_factory(registry: Registry(key, msg)) {
+  factory_supervisor.worker_child(fn(start_fn) { start_fn() })
+  |> factory_supervisor.restart_strategy(supervision.Transient)
+  |> factory_supervisor.named(registry.factory_supervisor_name)
+  |> factory_supervisor.supervised
+}
+
+fn get_worker(registry: Registry(key, msg)) {
+  supervision.worker(fn() { start_registry_actor(registry) })
+}
+
 /// A specification for starting the registry under a supervisor.
 ///
 /// This returns a supervisor that manages both the factory supervisor (which
 /// supervises dynamically started actors) and the registry actor itself.
-pub fn supervised(
-  registry: Registry(key, msg),
-) -> supervision.ChildSpecification(static_supervisor.Supervisor) {
-  let factory_builder =
-    factory_supervisor.worker_child(fn(start_fn) { start_fn() })
-    |> factory_supervisor.restart_strategy(supervision.Transient)
-    |> factory_supervisor.named(registry.factory_supervisor_name)
-
-  let worker = supervision.worker(fn() { start_registry_actor(registry) })
-
+pub fn supervised(registry: Registry(key, msg)) {
   supervision.supervisor(fn() {
     static_supervisor.new(static_supervisor.OneForAll)
-    |> static_supervisor.add(factory_supervisor.supervised(factory_builder))
-    |> static_supervisor.add(worker)
+    |> static_supervisor.add(get_factory(registry))
+    |> static_supervisor.add(get_worker(registry))
     |> static_supervisor.start
   })
 }
