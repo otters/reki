@@ -192,8 +192,7 @@ pub fn lookup_or_start(
   start_fn: fn() ->
     Result(actor.Started(process.Subject(msg)), actor.StartError),
 ) -> Result(process.Subject(msg), actor.StartError) {
-  let ets_table_name = registry.ets_table_name
-  case ets.get_or_create(ets_table_name) {
+  case ets.get_or_create(registry.ets_table_name) {
     Ok(ets_table) -> {
       case ets.lookup_dynamic(key, ets_table) {
         Ok(subject_dynamic) -> Ok(cast_subject(subject_dynamic))
