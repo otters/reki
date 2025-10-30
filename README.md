@@ -26,15 +26,13 @@ pub type CounterMessage {
 }
 
 pub fn main() {
-  // Create names at program start (before supervision tree)
-  let registry_name = process.new_name("my_registry")
+  // Create registry at program start (before supervision tree)
+  let registry = reki.new("my_registry")
 
    let assert Ok(_) =
     supervisor.new(supervisor.OneForOne)
-    |> supervisor.add(reki.supervised(registry_name))
+    |> supervisor.add(reki.supervised(registry))
     |> supervisor.start
-
-  let registry = reki.from_name(registry_name)
 
    let assert Ok(counter) = reki.lookup_or_start(
     registry,
@@ -89,6 +87,6 @@ pub fn main() {
 
 ## How it works
 
-The registry maintains a dictionary of actors keyed by whatever key you want to use. When you call `lookup_or_start`, it checks if an actor exists for that key. If it does, it returns the existing actor. If not, it starts a new one using your provided start function and registers it.
+The registry maintains a dictionary of actors keyed by whatever key you want to use. When you call `lookup_or_start`, it checks if an actor exists for that key. If it does, it returns the existing actor. If not, it starts a new one using your provided start function under a factory supervisor and registers it.
 
-The registry monitors all registered actors and automatically removes them when they die, preventing memory leaks. Concurrent lookups are handled safely through the actor's message queue, ensuring only one actor is created per key even when multiple processes request the same key simultaneously.
+All dynamically started actors are supervised by a factory supervisor, ensuring they are properly managed and restarted if they crash abnormally. The registry monitors all registered actors and automatically removes them when they die, preventing memory leaks. Concurrent lookups are handled safely through the actor's message queue, ensuring only one actor is created per key even when multiple processes request the same key simultaneously.
