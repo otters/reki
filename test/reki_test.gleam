@@ -34,7 +34,7 @@ fn test_start_fn() {
   |> actor.start
 }
 
-fn create_registry(test_name: String) -> reki.Registry(String, TestMessage) {
+fn create_registry(test_name: String) {
   let unique_ref = reference.new()
   let unique_name = test_name <> "_" <> string.inspect(unique_ref)
   let registry = reki.new(unique_name)
