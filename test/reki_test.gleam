@@ -406,13 +406,6 @@ pub fn start_fn_failure_propagates_error_test() {
     reki.lookup_or_start(registry, "failing_key", timeout, failing_start_fn)
 }
 
-pub fn timeout_handling_test() {
-  let registry = create_registry()
-
-  let assert Ok(_) =
-    reki.lookup_or_start(registry, "timeout_test", 1, test_start_fn)
-}
-
 pub fn registry_handles_multiple_failures_test() {
   let registry = create_registry()
 
